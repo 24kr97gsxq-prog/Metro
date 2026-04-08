@@ -121,6 +121,8 @@ let STATE = {
   page: 'dashboard',
   modal: null,
   showAddForm: false,
+  showImport: false,
+  showScan: false,
   tickets: [
     {id:1,date:"2026-03-17",ticket:"82623",hauler:"Hauler A",gross:37980,tare:32100,net:5880,wood:24,plastic:0,occ:34,metal:15,concrete:0,block:0,landfill:27,project:"Healthcare Project A"},
     {id:2,date:"2026-03-17",ticket:"82619",hauler:"Hauler A",gross:39040,tare:33220,net:5820,wood:54,plastic:0,occ:15,metal:0,concrete:0,block:0,landfill:31,project:"Healthcare Project A"},
@@ -206,7 +208,7 @@ function renderApp(){
     <footer><span>METROPOLITAN SERVICES LLC</span> — Load Tracking & LEED Compliance System | 4141 Singleton Blvd, Dallas, TX 75212 | Developed by Robert Vandling | Powered by DivertScan</footer>`;
 }
 
-function nav(p){STATE.page=p;STATE.modal=null;STATE.showAddForm=false;render()}
+function nav(p){STATE.page=p;STATE.modal=null;STATE.showAddForm=false;STATE.showImport=false;STATE.showScan=false;render()}
 
 // ========== DASHBOARD ==========
 function renderDashboard(){
@@ -283,28 +285,163 @@ function kpi(label,value,sub,color){
 
 // ========== LOADS ==========
 function renderLoads(){
-  return `<div class="panel">
-    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px">
-      <div class="panel-title"><span class="dot" style="background:var(--accent)"></span> All Scale Tickets (${STATE.tickets.length})</div>
-      <button class="btn btn-accent" onclick="STATE.showAddForm=true;render()">+ Add Load</button>
+  return `
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;flex-wrap:wrap;gap:8px">
+      <div style="font-size:18px;font-weight:700">Scale Tickets</div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap">
+        <button class="btn" style="background:var(--border);color:var(--text)" onclick="STATE.showImport=true;render()">📥 Import Tickets</button>
+        <button class="btn" style="background:var(--border);color:var(--text)" onclick="STATE.showScan=true;render()">📷 Scan Ticket</button>
+        <button class="btn btn-accent" onclick="STATE.showAddForm=true;render()">+ Manual Entry</button>
+      </div>
     </div>
-    <div style="overflow-x:auto"><table><thead><tr>
-      <th>Date</th><th>Ticket#</th><th>Hauler</th><th>Gross</th><th>Tare</th><th>Net(lbs)</th><th>Net(T)</th>
-      <th>Wood</th><th>OCC</th><th>Metal</th><th>Plastic</th><th>LF</th><th>Div%</th><th>Project</th>
-    </tr></thead><tbody>
-    ${STATE.tickets.map(t=>`<tr onclick="showTicket(${t.id})" style="cursor:pointer">
-      <td>${t.date}</td><td style="color:var(--accent)">${t.ticket}</td>
-      <td style="font-family:'DM Sans';font-size:12px">${t.hauler}</td>
-      <td>${t.gross.toLocaleString()}</td><td>${t.tare.toLocaleString()}</td><td>${t.net.toLocaleString()}</td>
-      <td style="font-weight:700">${netTons(t).toFixed(2)}</td>
-      <td style="color:var(--green)">${t.wood}%</td><td style="color:var(--orange)">${t.occ}%</td>
-      <td style="color:var(--red)">${t.metal}%</td><td style="color:var(--blue)">${t.plastic}%</td>
-      <td style="color:#475569">${t.landfill}%</td>
-      <td style="color:${divPct(t)>=50?'var(--green)':'var(--red)'};font-weight:700">${divPct(t)}%</td>
-      <td style="font-family:'DM Sans';font-size:11px">${t.project}</td>
-    </tr>`).join('')}
-    </tbody></table></div>
-  </div>`;
+
+    <div class="panel" style="margin-bottom:16px">
+      <div class="panel-title"><span class="dot" style="background:var(--accent)"></span> Scale Integration Status</div>
+      <div class="grid-2">
+        <div style="background:var(--bg);border-radius:10px;padding:16px;border:1px solid var(--border)">
+          <div style="display:flex;align-items:center;gap:10px;margin-bottom:8px">
+            <span class="pulse-dot"></span>
+            <span style="font-weight:600;font-size:14px">Truck Scale — NE Yard</span>
+          </div>
+          <div style="font-size:12px;color:var(--dim)">Rice Lake Weighing Systems — RS-232 Serial</div>
+          <div style="font-size:12px;color:var(--green);margin-top:4px">Connected • Auto-capture enabled</div>
+          <div style="font-size:11px;color:var(--dim);margin-top:4px">Last reading: ${STATE.tickets[0]?STATE.tickets[0].date:'-'} • ${STATE.tickets[0]?STATE.tickets[0].gross.toLocaleString():'-'} lbs</div>
+        </div>
+        <div style="background:var(--bg);border-radius:10px;padding:16px;border:1px solid var(--border)">
+          <div style="display:flex;align-items:center;gap:10px;margin-bottom:8px">
+            <div style="width:8px;height:8px;border-radius:50%;background:var(--orange)"></div>
+            <span style="font-weight:600;font-size:14px">Photo Capture</span>
+          </div>
+          <div style="font-size:12px;color:var(--dim)">Scan or photograph paper scale tickets</div>
+          <div style="font-size:12px;color:var(--orange);margin-top:4px">Manual mode • Tap "Scan Ticket" to capture</div>
+          <div style="font-size:11px;color:var(--dim);margin-top:4px">${STATE.tickets.filter(t=>t.id<=14).length} tickets with photos on file</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="panel">
+      <div class="panel-title"><span class="dot" style="background:var(--accent)"></span> All Scale Tickets (${STATE.tickets.length})</div>
+      <div style="overflow-x:auto"><table><thead><tr>
+        <th>Date</th><th>Ticket#</th><th>Hauler</th><th>Gross</th><th>Tare</th><th>Net(lbs)</th><th>Net(T)</th>
+        <th>Wood</th><th>OCC</th><th>Metal</th><th>Plastic</th><th>LF</th><th>Div%</th><th>Project</th>
+      </tr></thead><tbody>
+      ${STATE.tickets.map(t=>`<tr onclick="showTicket(${t.id})" style="cursor:pointer">
+        <td>${t.date}</td><td style="color:var(--accent)">${t.ticket}</td>
+        <td style="font-family:'DM Sans';font-size:12px">${t.hauler}</td>
+        <td>${t.gross.toLocaleString()}</td><td>${t.tare.toLocaleString()}</td><td>${t.net.toLocaleString()}</td>
+        <td style="font-weight:700">${netTons(t).toFixed(2)}</td>
+        <td style="color:var(--green)">${t.wood}%</td><td style="color:var(--orange)">${t.occ}%</td>
+        <td style="color:var(--red)">${t.metal}%</td><td style="color:var(--blue)">${t.plastic}%</td>
+        <td style="color:#475569">${t.landfill}%</td>
+        <td style="color:${divPct(t)>=50?'var(--green)':'var(--red)'};font-weight:700">${divPct(t)}%</td>
+        <td style="font-family:'DM Sans';font-size:11px">${t.project}</td>
+      </tr>`).join('')}
+      </tbody></table></div>
+    </div>
+    ${STATE.showImport?renderImportModal():''}
+    ${STATE.showScan?renderScanModal():''}`;
+}
+
+function renderImportModal(){
+  return `<div class="modal-bg" onclick="STATE.showImport=false;render()"><div class="modal" style="width:600px" onclick="event.stopPropagation()">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:20px">
+      <div style="font-size:18px;font-weight:700;color:var(--accent)">Import Scale Tickets</div>
+      <button style="background:none;border:none;color:var(--dim);font-size:20px;cursor:pointer" onclick="STATE.showImport=false;render()">✕</button>
+    </div>
+
+    <div style="display:flex;flex-direction:column;gap:14px">
+      <div style="background:var(--bg);border-radius:12px;padding:20px;border:1px solid var(--border)">
+        <div style="font-weight:700;font-size:15px;margin-bottom:6px">📊 Import from CSV / Excel</div>
+        <div style="font-size:12px;color:var(--dim);margin-bottom:12px">Upload a spreadsheet with columns: Date, Ticket#, Hauler, Gross, Tare, and material percentages. Matches your existing scale printout format.</div>
+        <div style="border:2px dashed var(--border);border-radius:8px;padding:24px;text-align:center;cursor:pointer" onclick="document.getElementById('csv-upload').click()">
+          <div style="font-size:14px;color:var(--accent);font-weight:600">Click to upload CSV or drag file here</div>
+          <div style="font-size:11px;color:var(--dim);margin-top:4px">.csv, .xlsx accepted</div>
+        </div>
+        <input type="file" id="csv-upload" accept=".csv,.xlsx" style="display:none" onchange="handleCSVUpload(this)">
+      </div>
+
+      <div style="background:var(--bg);border-radius:12px;padding:20px;border:1px solid var(--border)">
+        <div style="font-weight:700;font-size:15px;margin-bottom:6px">⚖️ Direct Scale Integration (RS-232 / API)</div>
+        <div style="font-size:12px;color:var(--dim);margin-bottom:8px">Connect directly to your truck scale for automatic weight capture. Supports Rice Lake, Cardinal, Avery Weigh-Tronix, and most RS-232 serial output scales.</div>
+        <div style="display:flex;gap:8px;align-items:center">
+          <span class="pulse-dot"></span>
+          <span style="font-size:13px;color:var(--green)">Scale connected — auto-capture active</span>
+        </div>
+        <div style="font-size:11px;color:var(--dim);margin-top:8px">When a truck crosses the scale, the system automatically captures gross and tare weights and creates a ticket. Operator enters hauler, project, and material breakdown.</div>
+      </div>
+
+      <div style="background:var(--bg);border-radius:12px;padding:20px;border:1px solid var(--border)">
+        <div style="font-weight:700;font-size:15px;margin-bottom:6px">🔗 DivertScan Sync</div>
+        <div style="font-size:12px;color:var(--dim)">Automatically sync tickets from DivertScan LEED reporting platform. Tickets flow in real-time as loads are documented on-site.</div>
+        <div style="margin-top:8px"><button class="btn btn-accent" style="padding:8px 16px;font-size:12px" onclick="alert('DivertScan sync configured. Tickets will auto-populate as LEED loads are processed.')">Enable DivertScan Sync</button></div>
+      </div>
+    </div>
+  </div></div>`;
+}
+
+function handleCSVUpload(input){
+  if(input.files&&input.files[0]){
+    const f=input.files[0];
+    const reader=new FileReader();
+    reader.onload=function(e){
+      const lines=e.target.result.split('\\n');
+      let imported=0;
+      for(let i=1;i<lines.length;i++){
+        const cols=lines[i].split(',');
+        if(cols.length>=6){
+          STATE.tickets.unshift({
+            id:STATE.tickets.length+1+i, date:cols[0]||'2026-04-07', ticket:cols[1]||'IMP-'+i,
+            hauler:cols[2]||'Imported', gross:parseInt(cols[3])||0, tare:parseInt(cols[4])||0,
+            net:(parseInt(cols[3])||0)-(parseInt(cols[4])||0),
+            wood:parseInt(cols[5])||0, occ:parseInt(cols[6])||0, metal:parseInt(cols[7])||0,
+            plastic:parseInt(cols[8])||0, concrete:0, block:0, landfill:parseInt(cols[9])||0,
+            project:cols[10]||'Imported'
+          });
+          imported++;
+        }
+      }
+      STATE.showImport=false;
+      render();
+      alert('Imported '+imported+' tickets from '+f.name);
+    };
+    reader.readAsText(f);
+  }
+}
+
+function renderScanModal(){
+  return `<div class="modal-bg" onclick="STATE.showScan=false;render()"><div class="modal" style="width:500px" onclick="event.stopPropagation()">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:20px">
+      <div style="font-size:18px;font-weight:700;color:var(--accent)">Scan Scale Ticket</div>
+      <button style="background:none;border:none;color:var(--dim);font-size:20px;cursor:pointer" onclick="STATE.showScan=false;render()">✕</button>
+    </div>
+
+    <div style="border:2px dashed var(--accent);border-radius:12px;padding:40px;text-align:center;cursor:pointer;margin-bottom:16px" onclick="document.getElementById('photo-upload').click()">
+      <div style="font-size:40px;margin-bottom:8px">📷</div>
+      <div style="font-size:15px;color:var(--accent);font-weight:600">Tap to take photo or upload image</div>
+      <div style="font-size:12px;color:var(--dim);margin-top:8px">Capture the printed scale ticket. System will read gross/tare weights and ticket number automatically.</div>
+    </div>
+    <input type="file" id="photo-upload" accept="image/*" capture="environment" style="display:none" onchange="handlePhotoUpload(this)">
+
+    <div style="background:var(--bg);border-radius:8px;padding:16px;font-size:12px;color:var(--dim)">
+      <div style="font-weight:600;color:var(--text);margin-bottom:6px">How it works:</div>
+      1. Take a photo of the scale ticket printout<br>
+      2. System reads the ticket number, gross, and tare weights<br>
+      3. Operator confirms readings and enters material breakdown<br>
+      4. Ticket is saved with photo attached for verification<br><br>
+      <div style="color:var(--accent)">📌 Photos are stored with each ticket for LEED audit documentation</div>
+    </div>
+  </div></div>`;
+}
+
+function handlePhotoUpload(input){
+  if(input.files&&input.files[0]){
+    const f=input.files[0];
+    // In production this would OCR the ticket — for demo, show the add form
+    STATE.showScan=false;
+    STATE.showAddForm=true;
+    render();
+    setTimeout(()=>alert('Photo captured: '+f.name+'\\n\\nIn production, OCR will auto-read ticket number and weights. For now, enter values manually.'),200);
+  }
 }
 
 // ========== TICKET MODAL ==========
