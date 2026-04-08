@@ -123,6 +123,7 @@ let STATE = {
   showAddForm: false,
   showImport: false,
   showScan: false,
+  reportProject: null,
   tickets: [
     {id:1,date:"2026-03-17",ticket:"82623",hauler:"Hauler A",gross:37980,tare:32100,net:5880,wood:24,plastic:0,occ:34,metal:15,concrete:0,block:0,landfill:27,project:"Healthcare Project A"},
     {id:2,date:"2026-03-17",ticket:"82619",hauler:"Hauler A",gross:39040,tare:33220,net:5820,wood:54,plastic:0,occ:15,metal:0,concrete:0,block:0,landfill:31,project:"Healthcare Project A"},
@@ -654,6 +655,136 @@ function renderReports(){
         <td style="font-weight:700;color:var(--orange)">$${STATE.monthly.reduce((s,m)=>s+m.rev,0).toLocaleString()}</td>
         <td></td><td></td>
       </tr></tbody></table>
+    </div>
+
+    <div class="panel">
+      <div class="panel-title"><span class="dot" style="background:var(--accent)"></span> Project-Specific Reports</div>
+      <div style="font-size:12px;color:var(--dim);margin-bottom:16px">Select a project to view detailed load history, material breakdown, and diversion analysis</div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:20px">
+        ${[...new Set(T.map(t=>t.project))].map(proj=>{
+          const active=STATE.reportProject===proj;
+          return '<button class="btn" style="padding:8px 16px;font-size:12px;background:'+(active?'var(--accent)':'var(--border)')+';color:'+(active?'#080f14':'var(--text)')+'" onclick="STATE.reportProject='+"'"+proj+"'"+';render()">'+proj+'</button>';
+        }).join('')}
+        ${STATE.reportProject?'<button class="btn" style="padding:8px 16px;font-size:12px;background:var(--red);color:#fff" onclick="STATE.reportProject=null;render()">✕ Clear</button>':''}
+      </div>
+      ${STATE.reportProject?renderProjectReport(T):'<div style="text-align:center;padding:40px;color:var(--dim)">Select a project above to generate a detailed report</div>'}
+    </div>`;
+}
+
+function renderProjectReport(allTickets){
+  const proj=STATE.reportProject;
+  const T=allTickets.filter(t=>t.project===proj);
+  if(T.length===0)return '<div style="text-align:center;padding:20px;color:var(--dim)">No tickets found for this project</div>';
+
+  const totalT=T.reduce((s,t)=>s+netTons(t),0);
+  const totalD=T.reduce((s,t)=>s+netTons(t)*(divPct(t)/100),0);
+  const dr=Math.round(totalD/totalT*100);
+  const haulerName=T[0].hauler;
+  const firstDate=T.reduce((m,t)=>t.date<m?t.date:m,T[0].date);
+  const lastDate=T.reduce((m,t)=>t.date>m?t.date:m,T[0].date);
+
+  // Material totals
+  const mats={};
+  ['wood','occ','metal','plastic','concrete','landfill'].forEach(m=>{
+    mats[m]=T.reduce((s,t)=>s+netTons(t)*(t[m]/100),0);
+  });
+  const maxMat=Math.max(...Object.values(mats));
+
+  return `
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;flex-wrap:wrap;gap:8px">
+      <div style="font-size:16px;font-weight:700;color:var(--accent)">${proj}</div>
+      <div style="display:flex;gap:8px">
+        <button class="btn btn-accent" style="padding:8px 14px;font-size:12px" onclick="exportProjectCSV('${proj}')">📊 Export Project CSV</button>
+        <button class="btn" style="padding:8px 14px;font-size:12px;background:var(--border);color:var(--text)" onclick="exportProjectDiversion('${proj}')">📄 Diversion Report</button>
+      </div>
+    </div>
+
+    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:12px;margin-bottom:20px">
+      <div style="background:var(--bg);border-radius:10px;padding:14px;border:1px solid var(--border)">
+        <div style="font-size:10px;text-transform:uppercase;letter-spacing:1px;color:var(--dim);margin-bottom:4px">Hauler</div>
+        <div style="font-size:14px;font-weight:600">${haulerName}</div>
+      </div>
+      <div style="background:var(--bg);border-radius:10px;padding:14px;border:1px solid var(--border)">
+        <div style="font-size:10px;text-transform:uppercase;letter-spacing:1px;color:var(--dim);margin-bottom:4px">Total Loads</div>
+        <div style="font-size:22px;font-weight:700;color:var(--accent);font-family:'Space Mono',monospace">${T.length}</div>
+      </div>
+      <div style="background:var(--bg);border-radius:10px;padding:14px;border:1px solid var(--border)">
+        <div style="font-size:10px;text-transform:uppercase;letter-spacing:1px;color:var(--dim);margin-bottom:4px">Total Tons</div>
+        <div style="font-size:22px;font-weight:700;color:var(--orange);font-family:'Space Mono',monospace">${totalT.toFixed(1)}</div>
+      </div>
+      <div style="background:var(--bg);border-radius:10px;padding:14px;border:1px solid var(--border)">
+        <div style="font-size:10px;text-transform:uppercase;letter-spacing:1px;color:var(--dim);margin-bottom:4px">Diverted</div>
+        <div style="font-size:22px;font-weight:700;color:var(--green);font-family:'Space Mono',monospace">${totalD.toFixed(1)}</div>
+      </div>
+      <div style="background:var(--bg);border-radius:10px;padding:14px;border:1px solid var(--border)">
+        <div style="font-size:10px;text-transform:uppercase;letter-spacing:1px;color:var(--dim);margin-bottom:4px">Diversion Rate</div>
+        <div style="font-size:22px;font-weight:700;color:${dr>=50?'var(--green)':'var(--red)'};font-family:'Space Mono',monospace">${dr}%</div>
+      </div>
+      <div style="background:var(--bg);border-radius:10px;padding:14px;border:1px solid var(--border)">
+        <div style="font-size:10px;text-transform:uppercase;letter-spacing:1px;color:var(--dim);margin-bottom:4px">LEED Target</div>
+        <div style="font-size:14px;font-weight:700;color:${dr>=50?'var(--green)':'var(--red)'}">${dr>=50?'✓ EXCEEDS 50%':'✕ BELOW 50%'}</div>
+      </div>
+      <div style="background:var(--bg);border-radius:10px;padding:14px;border:1px solid var(--border)">
+        <div style="font-size:10px;text-transform:uppercase;letter-spacing:1px;color:var(--dim);margin-bottom:4px">Date Range</div>
+        <div style="font-size:12px;font-weight:600;font-family:'Space Mono',monospace">${firstDate}<br>${lastDate}</div>
+      </div>
+      <div style="background:var(--bg);border-radius:10px;padding:14px;border:1px solid var(--border)">
+        <div style="font-size:10px;text-transform:uppercase;letter-spacing:1px;color:var(--dim);margin-bottom:4px">Processing Rev</div>
+        <div style="font-size:22px;font-weight:700;color:var(--accent);font-family:'Space Mono',monospace">$${Math.round(totalT*125).toLocaleString()}</div>
+      </div>
+    </div>
+
+    <div class="grid-2" style="margin-bottom:16px">
+      <div>
+        <div style="font-size:12px;font-weight:600;color:var(--dim);text-transform:uppercase;letter-spacing:1px;margin-bottom:10px">Material Breakdown (Tons)</div>
+        ${['wood','occ','metal','plastic','landfill'].filter(m=>mats[m]>0).map(m=>{
+          const pct=maxMat>0?(mats[m]/maxMat*100):0;
+          return '<div style="display:flex;align-items:center;margin-bottom:10px">'+
+            '<div style="width:100px;font-size:12px;font-weight:500">'+(MATS[m]?MATS[m].label:m)+'</div>'+
+            '<div class="bar-bg" style="height:22px"><div class="bar" style="height:22px;width:'+pct+'%;background:'+(MATS[m]?MATS[m].color:'#666')+'">'+mats[m].toFixed(1)+'T</div></div>'+
+            '<div style="width:60px;text-align:right;font-family:Space Mono,monospace;font-size:11px;color:var(--dim);margin-left:8px">'+Math.round(mats[m]/totalT*100)+'%</div>'+
+          '</div>';
+        }).join('')}
+      </div>
+      <div>
+        <div style="font-size:12px;font-weight:600;color:var(--dim);text-transform:uppercase;letter-spacing:1px;margin-bottom:10px">Diversion Breakdown</div>
+        <div style="display:flex;align-items:center;justify-content:center;padding:10px">
+          <div class="gauge" style="width:140px;height:140px;background:conic-gradient(var(--green) 0deg ${dr*3.6}deg,#475569 ${dr*3.6}deg 360deg)">
+            <div class="gauge-inner" style="width:110px;height:110px">
+              <div style="font-size:28px;font-weight:700;color:var(--green);font-family:Space Mono,monospace">${dr}%</div>
+              <div style="font-size:9px;color:var(--dim);text-transform:uppercase">Diverted</div>
+            </div>
+          </div>
+        </div>
+        <div style="display:flex;justify-content:space-around;margin-top:8px;font-size:12px">
+          <div style="text-align:center"><div style="color:var(--green);font-weight:700;font-family:Space Mono,monospace">${totalD.toFixed(1)}T</div><div style="color:var(--dim)">Diverted</div></div>
+          <div style="text-align:center"><div style="color:#475569;font-weight:700;font-family:Space Mono,monospace">${(totalT-totalD).toFixed(1)}T</div><div style="color:var(--dim)">Landfill</div></div>
+        </div>
+      </div>
+    </div>
+
+    <div style="font-size:12px;font-weight:600;color:var(--dim);text-transform:uppercase;letter-spacing:1px;margin-bottom:10px">All Tickets — ${proj}</div>
+    <div style="overflow-x:auto;max-height:350px;overflow-y:auto">
+    <table><thead><tr>
+      <th>Date</th><th>Ticket#</th><th>Gross</th><th>Tare</th><th>Net(lbs)</th><th>Net(T)</th>
+      <th>Wood</th><th>OCC</th><th>Metal</th><th>Plastic</th><th>LF</th><th>Div%</th>
+    </tr></thead><tbody>
+    ${T.map(t=>'<tr>'+
+      '<td>'+t.date+'</td><td style="color:var(--accent)">'+t.ticket+'</td>'+
+      '<td>'+t.gross.toLocaleString()+'</td><td>'+t.tare.toLocaleString()+'</td><td>'+t.net.toLocaleString()+'</td>'+
+      '<td style="font-weight:700">'+netTons(t).toFixed(2)+'</td>'+
+      '<td style="color:var(--green)">'+t.wood+'%</td><td style="color:var(--orange)">'+t.occ+'%</td>'+
+      '<td style="color:var(--red)">'+t.metal+'%</td><td style="color:var(--blue)">'+t.plastic+'%</td>'+
+      '<td style="color:#475569">'+t.landfill+'%</td>'+
+      '<td style="color:'+(divPct(t)>=50?'var(--green)':'var(--red)')+';font-weight:700">'+divPct(t)+'%</td>'+
+    '</tr>').join('')}
+    <tr style="border-top:2px solid var(--accent)">
+      <td style="font-weight:700;color:var(--accent)" colspan="5">TOTALS</td>
+      <td style="font-weight:700;color:var(--accent)">${totalT.toFixed(2)}</td>
+      <td colspan="5"></td>
+      <td style="font-weight:700;color:var(--green)">${dr}%</td>
+    </tr>
+    </tbody></table>
     </div>`;
 }
 
@@ -667,6 +798,63 @@ function exportReportCSV(){
 
 function exportReportPDF(){
   alert('PDF export will generate a formatted Waste Diversion Report. In production, this integrates with DivertScan reporting templates.\\n\\nFor now, use CSV export or the QB Export tab for QuickBooks-ready data.');
+}
+
+function exportProjectCSV(proj){
+  const T=STATE.tickets.filter(t=>t.project===proj);
+  let csv="Date,Ticket,Hauler,Gross(lbs),Tare(lbs),Net(lbs),Net(Tons),Wood%,OCC%,Metal%,Plastic%,Landfill%,Diversion%\\n";
+  T.forEach(t=>{
+    csv+=t.date+","+t.ticket+","+t.hauler+","+t.gross+","+t.tare+","+t.net+","+netTons(t).toFixed(2)+","+t.wood+","+t.occ+","+t.metal+","+t.plastic+","+t.landfill+","+divPct(t)+"\\n";
+  });
+  const totalT=T.reduce((s,t)=>s+netTons(t),0);
+  const totalD=T.reduce((s,t)=>s+netTons(t)*(divPct(t)/100),0);
+  csv+="\\nProject Summary\\n";
+  csv+="Project,"+proj+"\\n";
+  csv+="Total Loads,"+T.length+"\\n";
+  csv+="Total Tons,"+totalT.toFixed(2)+"\\n";
+  csv+="Diverted Tons,"+totalD.toFixed(2)+"\\n";
+  csv+="Diversion Rate,"+Math.round(totalD/totalT*100)+"%\\n";
+  csv+="LEED Target,50%\\n";
+  csv+="Status,"+(Math.round(totalD/totalT*100)>=50?"EXCEEDS TARGET":"BELOW TARGET")+"\\n";
+  downloadFile(csv,'Metropolitan_'+proj.replace(/[^a-zA-Z0-9]/g,'_')+'_Report.csv','text/csv');
+}
+
+function exportProjectDiversion(proj){
+  const T=STATE.tickets.filter(t=>t.project===proj);
+  const totalT=T.reduce((s,t)=>s+netTons(t),0);
+  const totalD=T.reduce((s,t)=>s+netTons(t)*(divPct(t)/100),0);
+  const dr=Math.round(totalD/totalT*100);
+  let csv="LEED v4 WASTE DIVERSION REPORT\\n";
+  csv+="\\n";
+  csv+="Facility,Metropolitan Services LLC\\n";
+  csv+="Address,4141 Singleton Blvd Dallas TX 75212\\n";
+  csv+="Project,"+proj+"\\n";
+  csv+="Report Date,"+new Date().toISOString().slice(0,10)+"\\n";
+  csv+="\\n";
+  csv+="DIVERSION SUMMARY\\n";
+  csv+="Total Material Received (tons),"+totalT.toFixed(2)+"\\n";
+  csv+="Material Diverted (tons),"+totalD.toFixed(2)+"\\n";
+  csv+="Material to Landfill (tons),"+(totalT-totalD).toFixed(2)+"\\n";
+  csv+="Diversion Rate,"+dr+"%\\n";
+  csv+="LEED v4 Target,50%\\n";
+  csv+="Status,"+(dr>=50?"EXCEEDS TARGET":"BELOW TARGET")+"\\n";
+  csv+="\\n";
+  csv+="MATERIAL BREAKDOWN\\n";
+  csv+="Material,Tons,Percentage\\n";
+  ['wood','occ','metal','plastic','concrete','landfill'].forEach(m=>{
+    const tons=T.reduce((s,t)=>s+netTons(t)*(t[m]/100),0);
+    if(tons>0) csv+=(MATS[m]?MATS[m].label:m)+","+tons.toFixed(2)+","+Math.round(tons/totalT*100)+"%\\n";
+  });
+  csv+="\\n";
+  csv+="TICKET DETAIL\\n";
+  csv+="Date,Ticket#,Gross(lbs),Tare(lbs),Net(lbs),Net(Tons),Diversion%\\n";
+  T.forEach(t=>{
+    csv+=t.date+","+t.ticket+","+t.gross+","+t.tare+","+t.net+","+netTons(t).toFixed(2)+","+divPct(t)+"%\\n";
+  });
+  csv+="\\n";
+  csv+="Prepared by,Robert Vandling\\n";
+  csv+="Verified by,DivertScan Platform\\n";
+  downloadFile(csv,'Metropolitan_'+proj.replace(/[^a-zA-Z0-9]/g,'_')+'_Diversion_Report.csv','text/csv');
 }
 
 function downloadFile(content,filename,type){
